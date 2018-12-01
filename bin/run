@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#
+# Copyright (c) 2016 10x Genomics, Inc. All rights reserved.
+#
+# Run is now deprecated. Tell user what to do.
+#
+
+cat <<EOF
+'longranger run' is no longer supported. Instead, please use:
+    'longranger wgs' for whole genome sequencing, or
+    'longranger targeted' for whole exome or targeted sequencing
+EOF

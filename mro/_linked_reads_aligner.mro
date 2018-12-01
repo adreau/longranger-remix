@@ -1,0 +1,85 @@
+#
+# Copyright (c) 2015 10X Genomics, Inc. All rights reserved.
+#
+@include "_sort_fastq_by_barcode.mro"
+@include "_linked_reads_aligner_stages.mro"
+@include "_aligner_stages.mro"
+@include "_bcsorter.mro"
+
+pipeline _LINKED_READS_ALIGNER(
+    in  string  fastq_mode                   "configuration of the input fastqs",
+    in  map[]   sample_def,
+    in  string  barcode_whitelist            "name of barcode whitelist file",
+    in  float   max_expected_barcode_errors,
+    in  int     trim_length,
+    in  bed     targets,
+    in  string  reference_path,
+    in  string  sample_id,
+    in  map     downsample,
+    in  bool    exclude_non_bc_reads,
+    out bam     possorted_bam,
+    out bam     bcsorted_bam,
+    out bam.bai possorted_bam_index,
+    out json    duplicate_summary,
+    out json    lot_info,
+    out json    downsample_info,
+)
+{
+    call local volatile SETUP_CHUNKS(
+        sample_id         = self.sample_id,
+        downsample        = self.downsample,
+        input_mode        = self.fastq_mode,
+        sample_def        = self.sample_def,
+        barcode_whitelist = self.barcode_whitelist,
+    )
+
+    call volatile TRIM_READS(
+        barcode_whitelist = self.barcode_whitelist,
+        chunks            = SETUP_CHUNKS.chunks,
+        max_read_num      = 10000000,
+        read1_trim_length = 0,
+        read2_trim_length = 0,
+    )
+
+    call _SORT_FASTQ_BY_BARCODE(
+        barcode_counts              = TRIM_READS.bc_counts,
+        bc_confidence_threshold     = 0.975,
+        chunk                       = TRIM_READS.chunks,
+        barcode_whitelist           = self.barcode_whitelist,
+        max_expected_barcode_errors = self.max_expected_barcode_errors,
+    )
+
+    call volatile BARCODE_AWARE_ALIGNER(
+        trim_length          = self.trim_length,
+        sample_id            = self.sample_id,
+        read_groups          = SETUP_CHUNKS.read_groups,
+        reads                = _SORT_FASTQ_BY_BARCODE.reads,
+        reference_path       = self.reference_path,
+        exclude_non_bc_reads = self.exclude_non_bc_reads,
+    )
+
+    call volatile MERGE_BC_BAM(
+        bc_sorted_bams = BARCODE_AWARE_ALIGNER.bc_sorted_bam,
+    )
+
+    call volatile MERGE_POS_BAM(
+        position_chunks = BARCODE_AWARE_ALIGNER.position_chunks,
+        reference_path  = self.reference_path,
+    )
+
+    call volatile MARK_DUPLICATES(
+        targets_file       = self.targets,
+        perfect_read_count = 1,
+        input              = MERGE_POS_BAM.pos_sorted_bam,
+        write_bam          = false,
+    )
+
+    return (
+        bcsorted_bam        = MERGE_BC_BAM.bc_sorted_bam,
+        possorted_bam       = MERGE_POS_BAM.pos_sorted_bam,
+        possorted_bam_index = MERGE_POS_BAM.pos_sorted_bam_index,
+        duplicate_summary   = MARK_DUPLICATES.duplicate_summary,
+        lot_info            = TRIM_READS.lot_info,
+        downsample_info     = SETUP_CHUNKS.downsample_info,
+    )
+}

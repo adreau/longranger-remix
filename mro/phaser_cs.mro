@@ -1,0 +1,51 @@
+#
+# Copyright (c) 2014 10X Genomics, Inc. All rights reserved.
+#
+@include "phaser.mro"
+# See phaser.mro for option documentation
+
+pipeline PHASER_CS(
+    in  string fastq_mode,
+    in  string sample_id,
+    in  string sample_desc,
+    in  map[]  sample_def,
+    in  string reference_path,
+    in  string sex,
+    in  bed    targets,
+    in  string restrict_locus,
+    in  string vc_precalled,
+    in  string vc_mode,
+    in  vcf    vc_ground_truth,
+    out csv    summary,
+    out loupe  loupe,
+)
+{
+    call PHASER(
+        fastq_mode              = self.fastq_mode,
+        sample_id               = self.sample_id,
+        sample_desc             = self.sample_desc,
+        sample_def              = self.sample_def,
+        sex                     = self.sex,
+        reference_path          = self.reference_path,
+        targets                 = self.targets,
+        restrict_locus          = self.restrict_locus,
+        comparison_vcf          = null,
+        exclude_non_bc_reads    = false,
+        trim_length             = 7,
+        barcode_whitelist       = "4M-with-alts-february-2016",
+        confident_regions       = null,
+        cov_regions_of_interest = null,
+        vc_regions_of_interest  = null,
+        vc_precalled            = self.vc_precalled,
+        vc_mode                 = self.vc_mode,
+        vc_ground_truth         = self.vc_ground_truth,
+        validation_bam          = null,
+        vc_max_coverage         = 100000,
+        p1_genes_list           = null,
+    )
+
+    return (
+        summary = PHASER.summary_cs,
+        loupe   = PHASER.loupe,
+    )
+}

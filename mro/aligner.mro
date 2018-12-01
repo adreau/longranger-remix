@@ -1,0 +1,140 @@
+#
+# Copyright (c) 2014 10X Genomics, Inc. All rights reserved.
+#
+@include "_aligner.mro"
+@include "_preflight_stages.mro"
+@include "_reporter.mro"
+@include "_snpindel_phaser_stages.mro"
+
+pipeline ALIGNER(
+    in  string  fastq_mode                "configuration of the input fastqs",
+    in  string  sample_id,
+    in  map[]   sample_def,
+    in  map     downsample,
+    in  string  reference_path,
+    in  bed     targets,
+    in  int     trim_length,
+    in  string  barcode_whitelist,
+    in  map     coverage_rois,
+    out bam     possorted_bam,
+    out bam.bai possorted_bam_index,
+    out json    duplicate_summary,
+    out json    basic_summary,
+    out h5      barcode_counts,
+    out json    insert_sizes,
+    out json    target_dists,
+    out json    mapq_counts,
+    out json    coverage_results,
+    out json    attach_phasing_results,
+    out h5      coverage_details,
+    out h5      target_coverage,
+    out csv     coverage_csv,
+    out json    single_partition_results,
+    out json    filter_barcodes_results,
+    out json    length_mass_results,
+    out h5      fragments,
+    out json    barcode_histogram,
+    out json    summary,
+    out csv     summary_cs,
+    out tsv     barcode_blacklist,
+    out json    alarms,
+    out txt     alarms_summary,
+)
+{
+    call local preflight ALIGNER_PREFLIGHT_LOCAL(
+        sample_id         = self.sample_id,
+        sample_def        = self.sample_def,
+        targets           = self.targets,
+        reference_path    = self.reference_path,
+        check_executables = false,
+    )
+
+    call preflight ALIGNER_PREFLIGHT(
+        sample_id         = self.sample_id,
+        sample_def        = self.sample_def,
+        targets           = self.targets,
+        reference_path    = self.reference_path,
+        check_executables = true,
+    )
+
+    call _ALIGNER(
+        sample_id            = self.sample_id,
+        fastq_mode           = self.fastq_mode,
+        sample_def           = self.sample_def,
+        exclude_non_bc_reads = false,
+        trim_length          = self.trim_length,
+        reference_path       = self.reference_path,
+        barcode_whitelist    = self.barcode_whitelist,
+        targets              = self.targets,
+        downsample           = self.downsample,
+    )
+
+    call _REPORTER(
+        sex               = null,
+        vc_max_coverage   = 100000,
+        bcsorted_bam      = _ALIGNER.bcsorted_bam,
+        possorted_bam     = _ALIGNER.possorted_bam,
+        reference_path    = self.reference_path,
+        targets           = self.targets,
+        confident_regions = null,
+        barcode_whitelist = self.barcode_whitelist,
+        restrict_locus    = null,
+        lot_info          = _ALIGNER.lot_info,
+        coverage_rois     = self.coverage_rois,
+    )
+
+    call ATTACH_PHASING(
+        input            = _ALIGNER.possorted_bam,
+        fragments        = _REPORTER.fragments,
+        fragment_phasing = null,
+    )
+
+    call SUMMARIZE_REPORTS(
+        sample_id                = self.sample_id,
+        reference_path           = self.reference_path,
+        targets                  = self.targets,
+        trim_length              = self.trim_length,
+        duplicate_summary        = _ALIGNER.duplicate_summary,
+        basic_results            = _REPORTER.basic_summary,
+        barcode_counts           = _REPORTER.barcode_counts,
+        filter_barcodes_results  = _REPORTER.filter_barcodes_results,
+        coverage_results         = _REPORTER.coverage_results,
+        coverage_details         = _REPORTER.coverage_details,
+        variant_results          = null,
+        sv_results               = null,
+        sv_min_call_qv_wgs       = 0,
+        sv_min_call_qv_target    = 0,
+        short_del_results        = null,
+        single_partition_results = _REPORTER.single_partition_results,
+        length_mass_results      = _REPORTER.length_mass_results,
+        bam_file                 = ATTACH_PHASING.phased_possorted_bam,
+        lot_info                 = _REPORTER.lot_info,
+        downsample_info          = _ALIGNER.downsample_info,
+    )
+
+    return (
+        duplicate_summary        = _ALIGNER.duplicate_summary,
+        possorted_bam            = ATTACH_PHASING.phased_possorted_bam,
+        possorted_bam_index      = ATTACH_PHASING.phased_possorted_bam_index,
+        basic_summary            = _REPORTER.basic_summary,
+        barcode_counts           = _REPORTER.barcode_counts,
+        insert_sizes             = _REPORTER.insert_sizes,
+        target_dists             = _REPORTER.target_dists,
+        mapq_counts              = _REPORTER.mapq_counts,
+        coverage_results         = _REPORTER.coverage_results,
+        coverage_details         = _REPORTER.coverage_details,
+        target_coverage          = _REPORTER.target_coverage,
+        coverage_csv             = _REPORTER.coverage_csv,
+        single_partition_results = _REPORTER.single_partition_results,
+        filter_barcodes_results  = _REPORTER.filter_barcodes_results,
+        length_mass_results      = _REPORTER.length_mass_results,
+        fragments                = _REPORTER.fragments,
+        barcode_histogram        = _REPORTER.barcode_histogram,
+        summary                  = SUMMARIZE_REPORTS.summary,
+        summary_cs               = SUMMARIZE_REPORTS.summary_cs,
+        barcode_blacklist        = _REPORTER.barcode_blacklist,
+        alarms                   = SUMMARIZE_REPORTS.alarms,
+        alarms_summary           = SUMMARIZE_REPORTS.alarms_summary,
+        attach_phasing_results   = ATTACH_PHASING.summary,
+    )
+}

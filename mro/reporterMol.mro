@@ -1,0 +1,39 @@
+#
+# Copyright (c) 2014 10X Genomics, Inc. All rights reserved.
+#
+@include "_reporterMol.mro"
+
+pipeline REPORTERMOL(
+    in  string reference_path              "name of the reference",
+    in  string vc_precalled,
+    in  bam    bam_bcsorted                "bam file BC sorted",
+    in  bam    bam_possorted               "bam file pos sorted",
+    out json   single_partition_results,
+    out json   fragment_histogram,
+    out h5     fragments,
+    out h5     barcodes,
+    out json   barcode_histogram,
+    out tsv fragments_tsv,
+    out vcf.gz variants                    "results file",
+)
+{
+    call _REPORTERMOL(
+      reference_path             = self.reference_path,
+      vc_precalled               = self.vc_precalled,
+      mode                       = "disable",
+      min_mapq_attach_bc         = 30,
+      bam_bcsorted               = self.bam_bcsorted,
+      bam_possorted              = self.bam_possorted,
+    )
+
+    return (
+        single_partition_results    = _REPORTERMOL.single_partition_results,
+        fragment_histogram          = _REPORTERMOL.fragment_histogram,
+        fragments                   = _REPORTERMOL.fragments,
+        barcodes                    = _REPORTERMOL.barcodes,
+        barcode_histogram           = _REPORTERMOL.barcode_histogram,
+        fragments_tsv               = _REPORTERMOL.fragments_tsv,
+        variants                    = _REPORTERMOL.variants,
+    )
+
+}

@@ -1,0 +1,62 @@
+#
+# Copyright (c) 2014 10X Genomics, Inc. All rights reserved.
+#
+@include "_reporterMol_stages.mro"
+
+pipeline _REPORTERMOL(
+    in  bam    bam_bcsorted                       "duplicate-marked, bc sorted aligned bam file",
+    in  bam    bam_possorted                       "pos sorted and indexed bam file",
+    in  string reference_path              "name of the reference",
+    in  string vc_precalled              "vcf file",
+    in  string mode                        "'freebayes' or 'gatk'",
+    in  int    min_mapq_attach_bc,
+    out json   single_partition_results,
+    out json   fragment_histogram,
+    out h5     fragments,
+    out h5     barcodes,
+    out json   barcode_histogram,
+    out tsv fragments_tsv,
+    out vcf.gz variants                    "results file",
+)
+{
+    call REPORT_MOLECULES(
+        input              = self.bam_bcsorted,
+	    barcode_whitelist  = "4M-with-alts-february-2016",
+        targets_file       = null,
+        read_link_distance = 60000,
+    )
+
+    call CALL_SNPINDELS(
+        targets_file               = null,
+        high_coverage_excluded_bed = null,
+        vc_precalled               = self.vc_precalled,
+        variant_mode               = self.mode,
+        restrict_locus             = null,
+        input                      = self.bam_possorted,
+        reference_path             = self.reference_path,
+    )
+
+
+    call POPULATE_INFO_FIELDS(
+      vc_precalled       = CALL_SNPINDELS.precalled,
+      variant_mode       = self.mode,
+      haploid_merge      = null,
+      chunk_locus        = null,
+      input              = CALL_SNPINDELS,
+      reference_path     = self.reference_path,
+      bam                = self.bam_possorted,
+      min_mapq_attach_bc = self.min_mapq_attach_bc,
+      default_indel_qual = 43,
+    )
+
+    return (
+        single_partition_results    = REPORT_MOLECULES.single_partition,
+        fragment_histogram          = REPORT_MOLECULES.fragment_size,
+        fragments                   = REPORT_MOLECULES.fragments,
+        barcodes                    = REPORT_MOLECULES.barcodes,
+        barcode_histogram           = REPORT_MOLECULES.barcode_histogram,
+        fragments_tsv               = REPORT_MOLECULES.fragments_tsv,
+        variants = POPULATE_INFO_FIELDS,
+    )
+
+}

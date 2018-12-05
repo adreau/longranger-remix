@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+#
+# Run REPORTERMOL with mrp.
+#
+
+source $TENX_SCRIPTDIR/common/_includes
+DOCOPT_SPEC="$(cat <<EOF
+$DOCOPT_PREAMBLE_FASTQS
+
+Options:
+# Genome
+    $DOCOPT_OPTIONS_REFERENCE
+
+# Sample Specification
+    $DOCOPT_OPTIONS_SAMPLE_INFO
+
+    $DOCOPT_OPTIONS_FASTQS
+
+# Variant Calling
+    $DOCOPT_OPTIONS_VARIANT_CALLING
+
+# Other
+    $DOCOPT_OPTIONS_OTHER
+
+# Martian Runtime
+    $DOCOPT_OPTIONS_MRP_CLUSTER
+EOF
+)"
+
+function implement_process_options {
+    process_options_reference
+    process_options_longranger
+}
+
+function implement_generate_sample_defs {
+    generate_sample_defs_fastqs_crg
+}
+
+function implement_generate_mro {
+    cat <<EOF > $mro
+@include "reporterMol_cs.mro"
+
+call REPORTERMOL(
+
+    reference_path = $reference_path,
+    vc_precalled = $vc_precalled,
+    bam_bcsorted = $bam_bc,
+    bam_possorted = $bam_pos,
+
+)
+EOF
+}
+
+source $TENX_SCRIPTDIR/../tenkit/bin/common/_subcmd_mrp

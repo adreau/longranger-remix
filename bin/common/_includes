@@ -36,6 +36,8 @@ EOF
 read -d '' DOCOPT_OPTIONS_OTHER <<EOF
     --noloupe           Run pipeline without generating .loupe file.
     --vconly            Run only variant calling; no phasing or SV calling.
+    --bam_bc=PATH       BC sorted bam file
+    --bam_pos=PATH      Pos sorted bam file
 EOF
 
 function process_options_reference {
@@ -87,6 +89,20 @@ function process_options_longranger {
         sex=\"$sex\"
     else
         sex=null
+    fi
+
+    # --bam_bc
+    if [ -n "$bam_bc" ]; then
+	bam_bc=\"$bam_bc\"
+    else
+        bam_bc=null
+    fi
+
+    # --bam_pos
+    if [ -n "$bam_pos" ]; then
+        bam_pos=\"$bam_pos\"
+    else
+	bam_pos=null
     fi
 
     # --noloupe

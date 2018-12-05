@@ -22,6 +22,8 @@ SUBCMDS=(
     testrun
     upload 
     sitecheck
+    --
+    reporterMol
 )
 
 export TENX_SCRIPTDIR=$(dirname `readlink -f $0`)

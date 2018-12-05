@@ -1,0 +1,64 @@
+#
+# Copyright (c) 2015 10X Genomics, Inc. All rights reserved.
+#
+filetype bed;
+filetype bam;
+filetype json;
+filetype h5;
+filetype script;
+filetype txt;
+filetype png;
+filetype csv;
+filetype tsv;
+filetype vcf;
+filetype vcf.gz;
+filetype pickle;
+
+stage REPORT_MOLECULES(
+    in  bam    input,
+    in  string barcode_whitelist,
+    in  bed    targets_file,
+    in  int    read_link_distance,
+    out json   single_partition,
+    out json   fragment_size,
+    out h5     fragments,
+    out h5     barcodes,
+    out json   barcode_histogram,
+    out tsv    fragments_tsv,
+    src py     "stages/reporter/report_molecules",
+) split using (
+    in  string chunk_start,
+    in  string chunk_end,
+)
+
+stage CALL_SNPINDELS(
+    in  string vc_precalled,
+    in  string variant_mode                "'freebayes' or 'gatk:/path/to/GenomeAnalysisTK.jar'",
+    in  string restrict_locus,
+    in  bed    targets_file,
+    in  bam    input                       "sorted and indexed bam file",
+    in  string reference_path              "name of the reference reference_path",
+    in  bed    high_coverage_excluded_bed,
+    out vcf    precalled,
+    out vcf                                "output vcf",
+    src py     "stages/snpindels/call_snpindels",
+) split using (
+    in  string locus,
+)
+
+stage POPULATE_INFO_FIELDS(
+    in  vcf      vc_precalled,
+    in  string   variant_mode,
+    in  vcf.gz   haploid_merge       "optional vcf to merge with normal calls",
+    in  vcf      input,
+    in  string[] chunk_locus         "list of chunk loci, only required if supplying haploid_merge",
+    in  string   reference_path,
+    in  bam      bam,
+    in  int      min_mapq_attach_bc,
+    in  int      default_indel_qual,
+    out vcf.gz,
+    src py       "stages/snpindels/populate_info",
+) split using (
+    in  vcf      chunk_input,
+    in  string   chunk_locus,
+)

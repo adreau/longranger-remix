@@ -19,8 +19,9 @@ from tenkit.constants import FRAG_LEN_HIST_BIN_SIZE
 import tenkit.hdf5
 import tenkit.safe_json
 
+
 __MRO__ = """
-stage REPORT_SINGLE_PARTITION(
+stage REPORT_MOLECULES(
     in  bam    input,
     in  string barcode_whitelist,
     in  bed    targets_file,
@@ -30,7 +31,8 @@ stage REPORT_SINGLE_PARTITION(
     out h5     fragments,
     out h5     barcodes,
     out json   barcode_histogram,
-    src py     "stages/reporter/report_single_partition",
+    out tsv fragments_tsv,
+    src py     "stages/reporter/report_molecules",
 ) split using (
     in  string chunk_start,
     in  string chunk_end,
@@ -224,7 +226,7 @@ def join(args, outs, chunk_defs, chunk_outs):
     # Load BC data
     if outs.barcodes:
         bc_df = tenkit.hdf5.read_data_frame(outs.barcodes)
-        fragment_df = tenkit.hdf5.read_data_frame(outs.fragments, query_cols=['bc', 'num_reads', 'est_len', 'chrom', 'start_pos'])
+        fragment_df = tenkit.hdf5.read_data_frame(outs.fragments, query_cols=['bc', 'num_reads', 'est_len', 'chrom', 'start_pos', 'end_pos'])
 
         bc_df.sort('bc_num_reads', inplace=True)
 
@@ -292,6 +294,16 @@ def join(args, outs, chunk_defs, chunk_outs):
         effective_diversity = tk_stats.robust_divide((fragments.sum()**2.0), float(sum_sq))
         summary['effective_diversity_fragments'] = effective_diversity
 
+
+        fragment_output_file = open(outs.fragments_tsv, 'w')
+
+        for chrom, start_pos, end_pos, bc, num_reads in zip(fragment_df['chrom'],fragment_df['start_pos'],fragment_df['end_pos'],fragment_df['bc'],fragment_df['num_reads']):
+            line = [chrom, start_pos, end_pos, bc, num_reads]
+            line_str = "\t".join([str(x) for x in line])
+            fragment_output_file.write(line_str + "\n")
+
+        fragment_output_file.close()
+
     else:
         # No fragment_size file emitted
         outs.fragment_size = None
@@ -317,6 +329,9 @@ def join(args, outs, chunk_defs, chunk_outs):
     # Write summary to json
     with open(outs.single_partition, 'w') as summary_file:
         tenkit.safe_json.dump_numpy(summary, summary_file, pretty=True)
+
+
+
 
 def read_has_barcode(r):
     bc = tk_io.get_read_barcode(r)
@@ -405,7 +420,9 @@ def create_fragments(reads, max_distance):
                 last_q30 = 0
         else:
             last_read = current_frag[-1]
+	    first_read = current_frag[0]
             if r.tid != last_read.tid or r.pos - last_read.pos > max_distance:
+	        #if r.tid != last_read.tid or r.pos - last_read.pos > 30000 or r.pos - first_read.pos > 150000:
                 # Save this fragment and prepare for next
                 # Trim the trailing low quality reads from the fragment
                 frags.append([current_frag[f] for f in range(last_q30 + 1)])
@@ -494,6 +511,7 @@ def summarize_barcode(bc, all_reads, max_distance, references, targets):
     fragments = create_fragments(reads, max_distance)
     frag_stats = [summarize_fragment(f, references, targets) for f in fragments]
     frag_stats = [f for f in frag_stats if f is not None]
+
 
     # Don't emit 0-fragment BCs
     if len(frag_stats) == 0:

@@ -211,12 +211,16 @@ def sort(file_name, sorted_prefix=None):
 
     # NOTE -- need to update our internal samtools in order to use pysam.sort
     # pysam.sort(file_name, sorted_prefix)
-    subprocess.check_call(['samtools','sort', file_name, sorted_prefix])
+    #subprocess.check_call(['samtools','sort', file_name, sorted_prefix])
+
+    sorted_name = sorted_prefix + ".bam"
+    subprocess.check_call(['samtools','sort', '-o', sorted_name, file_name])
 
 def index(file_name):
     pysam.index(str(file_name))
     if not os.path.isfile(file_name + ".bai"):
-        martian.exit("samtools index failed, likely bam is not sorted")
+        #martian.exit("samtools index failed, likely bam is not sorted")
+        raise RuntimeError("samtools index failed, likely bam is not sorted")
 
 def sort_and_index(file_name, sorted_prefix=None):
     """ Sorts and indexes the bam file given by file_name.
@@ -228,7 +232,8 @@ def sort_and_index(file_name, sorted_prefix=None):
 
     # NOTE -- need to update our internal samtools in order to use pysam.sort
     # pysam.sort(file_name, sorted_prefix)
-    subprocess.check_call(['samtools','sort', file_name, sorted_prefix])
+    #subprocess.check_call(['samtools','sort', file_name, sorted_prefix])
+    subprocess.check_call(['samtools','sort', '-o', sorted_name, file_name])
     pysam.index(sorted_name)
 
 def merge(out_file_name, input_file_names, threads = 1):
@@ -240,12 +245,15 @@ def merge(out_file_name, input_file_names, threads = 1):
     #subprocess.check_call(args)
 
     if threads > 1:
-        args = ["-c", "-p", "-@", str(threads)]
+        #args = ["-c", "-p", "-@", str(threads)]
+        args = ["-c", "-p", "-s", "0", "-@", str(threads)]
     else:
         args = []
 
-    args.append(out_file_name)
-    args.extend(input_file_names)
+    #args.append(out_file_name)
+    #args.extend(input_file_names)
+    args.append(str(out_file_name))
+    args.extend([str(x) for x in input_file_names])
     pysam.merge(*args)
 
 def bam_is_empty(fn):
@@ -904,7 +912,9 @@ class BamIndex:
     def save_key_index(self):
         f = open(self.index_file_name, 'w')
         out_index = csv.writer(f, delimiter='\t')
-        nreads = 1000
+        #nreads = 1000
+        # lower the number of reads required
+        nreads = 1
 
         self.in_bam.reset()
 
@@ -919,11 +929,14 @@ class BamIndex:
 
                 cmp_value = self.cmp_func(key, last_key)
                 if cmp_value < 0:
+                    print read
+                    print "idx: %i, key: %s, last_key: %s" % (i, str(key), str(last_key))
                     raise Exception("BAM file %s is not sorted by key" % self.file_name)
                 elif cmp_value != 0:
                     out_index.writerow((key, last_pos))
                     last_key = key
-            elif i % nreads == nreads - 1:
+            #elif i % nreads == nreads - 1:
+            if i % nreads == nreads - 1:
                 last_pos = self.in_bam.tell()
 
         f.close()
@@ -1052,7 +1065,8 @@ def bc_cmp_func(bc1, bc2):
 
 class BamBCIndex(BamIndex):
     def __init__(self, file_name):
-        return BamIndex.__init__(self, file_name, 'bc', bc_key_func, bc_cmp_func)
+        #return BamIndex.__init__(self, file_name, 'bc', bc_key_func, bc_cmp_func)
+        return BamIndex.__init__(self, file_name, 'bxi', bc_key_func, bc_cmp_func)
 
     def save_index(self):
         BamIndex.save_key_index(self)
@@ -1062,3 +1076,10 @@ class BamBCIndex(BamIndex):
 
     def get_reads_bc_iter(self, bc):
         return BamIndex.get_reads_iter_with_key(self, bc)
+
+
+def get_insert_size(read):
+    if read.tid == read.mrnm:
+        return abs(read.pos - read.mpos) + len(read.seq)
+    else:
+        return float('Inf')
